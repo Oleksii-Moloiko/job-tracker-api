@@ -1,0 +1,31 @@
+
+
+services:
+  db:
+    image: postgres:16
+    container_name: job_tracker_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: job_tracker_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: job_tracker_app
+    restart: always
+    depends_on:
+      - db
+    env_file:
+      - .env.docker
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/code
+
+volumes:
+  postgres_data:
