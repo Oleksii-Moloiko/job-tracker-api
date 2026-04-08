@@ -269,3 +269,6 @@ This project was built to demonstrate real-world backend development skills, inc
 ### Oleksii Moloiko
 
 ---
+## 📸 API Preview
+
+![Swagger UI](./docs/swagger.png)
