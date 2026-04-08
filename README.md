@@ -1,44 +1,58 @@
-# Job Tracker API
+# 🚀 Job Tracker API
+![CI](https://github.com/Oleksii-Moloiko/job-tracker-api/actions/workflows/ci.yml/badge.svg)
 
-A production-like REST API for tracking job applications, built with FastAPI.
+Production-ready backend service for tracking job applications.
 
----
-
-## 🚀 Overview
-
-This project is a backend service that allows users to manage job applications.
-
-It includes authentication, protected routes, database persistence, and a Dockerized environment, making it easy to run on any machine.
+Built with FastAPI, PostgreSQL, and modern backend practices including JWT authentication, refresh tokens, and CI/CD.
 
 ---
 
 ## ✨ Features
 
-- User registration
-- JWT authentication (login)
-- Protected API routes
-- Get current authenticated user
-- Full CRUD for job applications
-- Ownership-based access control (users only see their own data)
+### 🔐 Authentication
+- JWT access tokens
+- Refresh tokens with rotation
+- Token revocation (logout)
+- Secure password hashing
+
+### 📦 Applications Management
+- Create, update, delete applications
+- Ownership-based access control
 - Filtering by status
-- Search by company name
+- Search by company
 - Pagination support
+
+### 🧠 Domain Model
+- Strong typing with enums (`ApplicationStatus`)
+- Clean data validation with Pydantic
+
+### ⚙️ Infrastructure
 - PostgreSQL database
-- Dockerized environment (API + DB)
-- Alembic database migrations
+- Alembic migrations
+- Environment-based configuration
+
+### 🧪 Testing & Quality
+- Pytest test suite
+- Auth flow fully tested
+- GitHub Actions CI pipeline
+
+### ❤️ Health Monitoring
+- `/health`
+- `/health/live`
+- `/health/ready`
 
 ---
 
-## 🧱 Tech Stack
+## 🛠 Tech Stack
 
-- **FastAPI** — backend framework
-- **PostgreSQL** — relational database
-- **SQLAlchemy** — ORM
-- **Pydantic** — validation
-- **JWT (python-jose)** — authentication
-- **Passlib (bcrypt)** — password hashing
-- **Docker & Docker Compose** — containerization
-- **Alembic** — database migrations
+- **FastAPI**
+- **SQLAlchemy**
+- **PostgreSQL**
+- **Alembic**
+- **Pydantic v2**
+- **JWT (python-jose)**
+- **Pytest**
+- **GitHub Actions**
 
 ---
 
@@ -46,118 +60,124 @@ It includes authentication, protected routes, database persistence, and a Docker
 
 ```bash
 app/
-├── main.py
-├── config.py
-├── database.py
-├── models.py
-├── schemas.py
-├── auth.py
-├── dependencies.py
-└── routers/
-    ├── auth.py
-    └── applications.py
+├── routers/ # API endpoints
+├── models/ # SQLAlchemy models
+├── schemas/ # Pydantic schemas
+├── auth.py # JWT + security logic
+├── dependencies.py # DI (auth, db)
+├── config.py # settings
+├── database.py # DB connection
+└── core/
+└── exceptions.py
 
-alembic/
-Dockerfile
-docker-compose.yml
-requirements.txt
+alembic/ # DB migrations
+tests/ # test suite
 ```
 
 ---
 
-## ⚙️ Environment Variables
+## ⚙️ Setup
 
-Create .env from .env.example:
+### 1. Clone repo
 ```bash
-cp .env.example .env
+git clone https://github.com/YOUR_USERNAME/job-tracker-api.git
+cd job-tracker-api
 ```
-Example:
+
+### 2. Create virtual environment
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+```
+
+3. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Setup environment
+Create .env file:
+
 ```env
-DATABASE_URL=postgresql://postgres:postgres@db:5432/job_tracker_db
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/job_tracker_db
 SECRET_KEY=your_secret_key
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 
----
-
-## 🐳 Run the Project
-
-Start everything with a single command:
+### 5.Run migrations
 ```bash
-docker compose up --build
+alembic upgrade head
 ```
-API documentation will be available at:
+
+### 6. Run app
 ```bash
+uvicorn app.main:app --reload
+```
+
+# 📖 API Docs
+
+Available at:
+```
 http://127.0.0.1:8000/docs
 ```
 
----
-
-## 🔐 Authentication Flow
-Register a user
-Log in via /auth/login
-Receive JWT access token
-Authorize in Swagger UI
-Use protected endpoints
-
----
-
-## 📌 API Endpoints
-Auth
-- POST /auth/register
-- POST /auth/login
-- GET /auth/me
-Applications
-- POST /applications
-- GET /applications
-- GET /applications/{application_id}
-- PUT /applications/{application_id}
-- DELETE /applications/{application_id}
-
----
-
-## 🔎 Query Parameters
-Filter by status
-```bash
-GET /applications?status=applied
+# 🔐 Auth Flow
+### Login
 ```
-Search by company name
-```bash
-GET /applications?search=google
-```
-Pagination
-```bash
-GET /applications?skip=0&limit=10
+POST /auth/login
 ```
 
----
+Returns:
+```json
+{
+  "access_token": "...",
+  "refresh_token": "...",
+  "token_type": "bearer"
+}
+```
 
-## 🧠 Key Concepts Demonstrated
-- JWT-based authentication and authorization
-- Dependency-based route protection in FastAPI
-- ORM modeling and relationships with SQLAlchemy
-- Ownership-based data isolation
-Database migrations with Alembic
-- Dockerized backend environment
-- API design beyond basic CRUD
+### Refresh
+```
+POST /auth/refresh
+```
+```json
+{
+  "refresh_token": "..."
+}
+```
 
----
+### Logout
+```
+POST /auth/logout
+```
+```json
+{
+  "refresh_token": "..."
+}
+```
 
-## 💬 About the Project
+# 🧪 Run Tests
+```bash
+pytest -v
+```
 
-This project started as a simple CRUD API but was refactored into a more realistic system for tracking job applications.
+# ⚡ CI
 
-The focus was on building a production-like backend with proper authentication, database design, and infrastructure setup.
+GitHub Actions pipeline:
 
----
+- installs dependencies
+- runs migrations
+- executes tests
 
-## 🚀 Future Improvements
-- Add automated tests (pytest)
-- Role-based access (admin/user)
-- Refresh tokens
-- Rate limiting
-- Logging and monitoring
+# 📌 Future Improvements
+- Rate limiting (login protection)
+- Role-based access control
+- Application history tracking
+- Background jobs (notifications)
+- Docker production setup
 
----
+# 👨‍💻 Author
 
+### Oleksii Moloiko
