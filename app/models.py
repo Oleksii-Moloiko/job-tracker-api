@@ -1,6 +1,7 @@
+import enum
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -16,6 +17,15 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     applications = relationship("Application", back_populates="owner", cascade="all, delete")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete")
+
+
+class ApplicationStatus(str, enum.Enum):
+    SAVED = "saved"
+    APPLIED = "applied"
+    INTERVIEW = "interview"
+    OFFER = "offer"
+    REJECTED = "rejected"
 
 
 class Application(Base):
@@ -24,7 +34,14 @@ class Application(Base):
     id = Column(Integer, primary_key=True, index=True)
     company_name = Column(String, nullable=False)
     position = Column(String, nullable=False)
-    status = Column(String, nullable=False, default="saved")
+    status = Column(
+        Enum(
+            ApplicationStatus,
+            values_callable=lambda obj: [e.value for e in obj]
+        ),
+        nullable=False,
+        default=ApplicationStatus.SAVED,
+    )
     notes = Column(Text, nullable=True)
     applied_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -32,3 +49,16 @@ class Application(Base):
 
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="applications")
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_revoked = Column(Boolean, default=False, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="refresh_tokens")

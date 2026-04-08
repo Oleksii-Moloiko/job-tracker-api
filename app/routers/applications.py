@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
 from app.models import Application, User
-from app.schemas import ApplicationCreate, ApplicationResponse, ApplicationUpdate
+from app.schemas import ApplicationCreate, ApplicationResponse, ApplicationUpdate, PaginatedApplicationResponse
+from app.core.exceptions import AppException
+
+
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
 
@@ -30,7 +33,7 @@ def create_application(
     return new_application
 
 
-@router.get("", response_model=list[ApplicationResponse])
+@router.get("", response_model=PaginatedApplicationResponse)
 def get_applications(
     status_filter: str | None = Query(default=None, alias="status"),
     search: str | None = None,
@@ -49,9 +52,15 @@ def get_applications(
     if search:
         query = query.filter(Application.company_name.ilike(f"%{search}%"))
 
+    total = query.count()
     applications = query.offset(skip).limit(limit).all()
 
-    return applications
+    return {
+        "items": applications,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
 
 
 @router.get("/{application_id}", response_model=ApplicationResponse)
@@ -66,9 +75,10 @@ def get_application(
     ).first()
 
     if not application:
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Application not found",
+            code="application_not_found",
+            message="Application not found",
         )
 
     return application
@@ -87,9 +97,10 @@ def update_application(
     ).first()
 
     if not application:
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Application not found",
+            code="application_not_found",
+            message="Application not found",
         )
 
     update_data = application_data.model_dump(exclude_unset=True)
@@ -115,9 +126,10 @@ def delete_application(
     ).first()
 
     if not application:
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Application not found",
+            code="application_not_found",
+            message="Application not found",
         )
 
     db.delete(application)

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers import applications, auth
+from app.routers import applications, auth, health
 
 
 app = FastAPI(title="Job Tracker API")
@@ -22,3 +22,4 @@ def root():
 
 app.include_router(auth.router)
 app.include_router(applications.router)
+app.include_router(health.router)
