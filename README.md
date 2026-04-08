@@ -1,13 +1,32 @@
 # 🚀 Job Tracker API
 ![CI](https://github.com/Oleksii-Moloiko/job-tracker-api/actions/workflows/ci.yml/badge.svg)
 
-Production-ready backend service for tracking job applications.
+Production-style backend API for tracking job applications, managing hiring pipelines, and analyzing job search performance.
 
 Built with FastAPI, PostgreSQL, and modern backend practices including JWT authentication, refresh tokens, and CI/CD.
 
 ---
 
 ## ✨ Features
+
+### 📊 Analytics
+
+- Applications count by status
+- Hiring funnel metrics
+- Conversion rates (applied → interview → offer)
+
+Example:
+
+```json
+{
+  "total": 120,
+  "applied": 80,
+  "interview": 15,
+  "offer": 3,
+  "conversion_to_interview": 0.1875,
+  "conversion_to_offer": 0.0375
+}
+```
 
 ### 🔐 Authentication
 - JWT access tokens
@@ -19,7 +38,9 @@ Built with FastAPI, PostgreSQL, and modern backend practices including JWT authe
 - Create, update, delete applications
 - Ownership-based access control
 - Filtering by status
-- Search by company
+- Search by company and position
+- Sorting (created_at, updated_at, etc.)
+- Typed filtering using enums
 - Pagination support
 
 ### 🧠 Domain Model
@@ -36,13 +57,48 @@ Built with FastAPI, PostgreSQL, and modern backend practices including JWT authe
 - Auth flow fully tested
 - GitHub Actions CI pipeline
 
-### ❤️ Health Monitoring
-- `/health`
-- `/health/live`
-- `/health/ready`
+## ❤️ Health Endpoints
+
+- `/health` – basic service status
+- `/health/live` – liveness probe
+- `/health/ready` – readiness check (DB connection)
+---
+## 📌 Key Highlights
+
+- Clean layered architecture (router/service/repository)
+- JWT authentication with refresh token rotation
+- Flexible querying (filtering, search, sorting, pagination)
+- Hiring funnel analytics
+- Fully tested authentication flow
+- CI pipeline with GitHub Actions
 
 ---
 
+## 📡 API Endpoints
+
+### Auth
+- POST /auth/register
+- POST /auth/login
+- GET /auth/me
+- POST /auth/refresh
+- POST /auth/logout
+
+### Applications
+- GET /applications
+- POST /applications
+- GET /applications/{id}
+- PUT /applications/{id}
+- DELETE /applications/{id}
+
+### Analytics
+- GET /applications/analytics/summary
+
+### Health
+- GET /health
+- GET /health/live
+- GET /health/ready
+
+---
 ## 🛠 Tech Stack
 
 - **FastAPI**
@@ -76,6 +132,21 @@ tests/ # test suite
 
 ---
 
+## 🏗 Architecture
+
+The project follows a layered architecture:
+
+Request → Router → Service → Repository → Database
+
+- **Routers** – handle HTTP requests and responses  
+- **Services** – contain business logic  
+- **Repositories** – handle database access  
+- **Models** – define ORM entities  
+- **Schemas** – validate request/response data  
+
+This separation improves maintainability, testability, and scalability.
+
+---
 ## ⚙️ Setup
 
 ### 1. Clone repo
@@ -178,6 +249,23 @@ GitHub Actions pipeline:
 - Background jobs (notifications)
 - Docker production setup
 
+---
+
+## 💡 About This Project
+
+This project was built to demonstrate real-world backend development skills, including:
+
+- API design best practices
+- authentication flows with token rotation
+- clean architecture patterns
+- database migrations and persistence
+- observability via logging
+- production-style features like analytics and health checks
+
+---
+
 # 👨‍💻 Author
 
 ### Oleksii Moloiko
+
+---

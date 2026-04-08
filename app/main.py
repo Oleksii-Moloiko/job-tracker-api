@@ -1,11 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
-from app.routers import applications, auth, health
+from app.core.logging import setup_logging
+from app.routers.applications import router as applications_router
+from app.routers.auth import router as auth_router
+from app.routers.health import router as health_router
 
 
-app = FastAPI(title="Job Tracker API")
+setup_logging()
+
+app = FastAPI(
+    title="Job Tracker API",
+    description="Production-style API for tracking job applications and hiring pipeline progress.",
+    version="1.0.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,6 +28,6 @@ def root():
     return {"message": "Job Tracker API is running"}
 
 
-app.include_router(auth.router)
-app.include_router(applications.router)
-app.include_router(health.router)
+app.include_router(auth_router)
+app.include_router(applications_router)
+app.include_router(health_router)

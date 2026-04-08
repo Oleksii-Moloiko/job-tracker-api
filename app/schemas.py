@@ -63,3 +63,14 @@ class PaginatedApplicationResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+
+class AnalyticsSummary(BaseModel):
+    total: int
+    saved: int
+    applied: int
+    interview: int
+    offer: int
+    rejected: int
+    conversion_to_interview: float
+    conversion_to_offer: float

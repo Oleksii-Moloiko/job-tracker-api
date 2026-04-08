@@ -1,136 +1,91 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_user, get_db
-from app.models import Application, User
-from app.schemas import ApplicationCreate, ApplicationResponse, ApplicationUpdate, PaginatedApplicationResponse
-from app.core.exceptions import AppException
-
-
+from app.models import ApplicationStatus, User
+from app.repositories.application_repository import ApplicationRepository
+from app.schemas import (
+    AnalyticsSummary,
+    ApplicationCreate,
+    ApplicationResponse,
+    ApplicationUpdate,
+    PaginatedApplicationResponse,
+)
+from app.services.application_service import ApplicationService
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
+
+
+def get_application_service(db: Session = Depends(get_db)) -> ApplicationService:
+    repository = ApplicationRepository(db)
+    return ApplicationService(repository)
 
 
 @router.post("", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 def create_application(
     application: ApplicationCreate,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    service: ApplicationService = Depends(get_application_service),
 ):
-    new_application = Application(
-        company_name=application.company_name,
-        position=application.position,
-        status=application.status,
-        notes=application.notes,
-        applied_at=application.applied_at,
-        owner_id=current_user.id,
-    )
-
-    db.add(new_application)
-    db.commit()
-    db.refresh(new_application)
-
-    return new_application
+    return service.create_application(application, current_user)
 
 
 @router.get("", response_model=PaginatedApplicationResponse)
 def get_applications(
-    status_filter: str | None = Query(default=None, alias="status"),
-    search: str | None = None,
-    skip: int = 0,
-    limit: int = 10,
-    db: Session = Depends(get_db),
+    status_filter: ApplicationStatus | None = Query(default=None, alias="status"),
+    search: str | None = Query(default=None, min_length=1, max_length=100),
+    sort_by: Literal["created_at", "updated_at", "company_name", "position", "status"] = Query(default="created_at"),
+    sort_order: Literal["asc", "desc"] = Query(default="desc"),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, ge=1, le=100),
     current_user: User = Depends(get_current_user),
+    service: ApplicationService = Depends(get_application_service),
 ):
-    query = db.query(Application).filter(
-        Application.owner_id == current_user.id
+    return service.get_applications(
+        current_user=current_user,
+        status_filter=status_filter,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        skip=skip,
+        limit=limit,
     )
-
-    if status_filter:
-        query = query.filter(Application.status == status_filter)
-
-    if search:
-        query = query.filter(Application.company_name.ilike(f"%{search}%"))
-
-    total = query.count()
-    applications = query.offset(skip).limit(limit).all()
-
-    return {
-        "items": applications,
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
 
 
 @router.get("/{application_id}", response_model=ApplicationResponse)
 def get_application(
     application_id: int,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    service: ApplicationService = Depends(get_application_service),
 ):
-    application = db.query(Application).filter(
-        Application.id == application_id,
-        Application.owner_id == current_user.id,
-    ).first()
-
-    if not application:
-        raise AppException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="application_not_found",
-            message="Application not found",
-        )
-
-    return application
+    return service.get_application(application_id, current_user)
 
 
 @router.put("/{application_id}", response_model=ApplicationResponse)
 def update_application(
     application_id: int,
     application_data: ApplicationUpdate,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    service: ApplicationService = Depends(get_application_service),
 ):
-    application = db.query(Application).filter(
-        Application.id == application_id,
-        Application.owner_id == current_user.id,
-    ).first()
-
-    if not application:
-        raise AppException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="application_not_found",
-            message="Application not found",
-        )
-
-    update_data = application_data.model_dump(exclude_unset=True)
-
-    for field, value in update_data.items():
-        setattr(application, field, value)
-
-    db.commit()
-    db.refresh(application)
-
-    return application
+    return service.update_application(application_id, application_data, current_user)
 
 
 @router.delete("/{application_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_application(
     application_id: int,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    service: ApplicationService = Depends(get_application_service),
 ):
-    application = db.query(Application).filter(
-        Application.id == application_id,
-        Application.owner_id == current_user.id,
-    ).first()
+    service.delete_application(application_id, current_user)
+    return None
 
-    if not application:
-        raise AppException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="application_not_found",
-            message="Application not found",
-        )
 
-    db.delete(application)
-    db.commit()
+@router.get("/analytics/summary", response_model=AnalyticsSummary)
+def get_analytics(
+    current_user: User = Depends(get_current_user),
+    service: ApplicationService = Depends(get_application_service),
+):
+    return service.get_analytics(current_user)

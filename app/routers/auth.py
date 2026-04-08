@@ -1,10 +1,10 @@
+import logging
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app import models
 from app.auth import (
     create_access_token,
     create_refresh_token,
@@ -12,37 +12,51 @@ from app.auth import (
     hash_password,
     verify_password,
 )
+from app.config import settings
+from app.core.exceptions import AppException
 from app.dependencies import get_current_user, get_db
 from app.models import RefreshToken, User
-from app.schemas import RefreshTokenRequest, TokenResponse, UserCreate, UserResponse
-from app.config import settings
+from app.schemas import (
+    RefreshTokenRequest,
+    TokenResponse,
+    UserCreate,
+    UserResponse,
+)
 
+
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user: UserCreate, db: Session = Depends(get_db)):
-    existing_user = db.query(models.User).filter(
-        (models.User.email == user.email) | (models.User.username == user.username)
+def register(
+    user_data: UserCreate,
+    db: Session = Depends(get_db),
+):
+    existing_user = db.query(User).filter(
+        (User.email == user_data.email) | (User.username == user_data.username)
     ).first()
 
     if existing_user:
-        raise HTTPException(
+        raise AppException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User with this email or username already exists",
+            code="user_already_exists",
+            message="User with this email or username already exists",
         )
 
-    db_user = models.User(
-        email=user.email,
-        username=user.username,
-        hashed_password=hash_password(user.password),
+    user = User(
+        email=user_data.email,
+        username=user_data.username,
+        hashed_password=hash_password(user_data.password),
     )
 
-    db.add(db_user)
+    db.add(user)
     db.commit()
-    db.refresh(db_user)
+    db.refresh(user)
+    logger.info("User registered: email=%s", user.email)
 
-    return db_user
+
+    return user
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -50,18 +64,18 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    user = db.query(models.User).filter(
-        models.User.email == form_data.username
-    ).first()
+    user = db.query(User).filter(User.email == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
+        logger.warning("Failed login attempt for email=%s", form_data.username)
+        raise AppException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            code="invalid_credentials",
+            message="Invalid email or password",
         )
 
-    access_token = create_access_token({"sub": str(user.id)})
-    refresh_token = create_refresh_token({"sub": str(user.id)})
+    access_token = create_access_token({"sub": str(user.id), "email": user.email})
+    refresh_token = create_refresh_token({"sub": str(user.id), "email": user.email})
 
     refresh_token_expires_at = datetime.utcnow() + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
@@ -71,10 +85,12 @@ def login(
         token=refresh_token,
         user_id=user.id,
         expires_at=refresh_token_expires_at,
+        is_revoked=False,
     )
-
     db.add(db_refresh_token)
     db.commit()
+    logger.info("User login success: user_id=%s", user.id)
+
 
     return {
         "access_token": access_token,
@@ -83,59 +99,69 @@ def login(
     }
 
 
+@router.get("/me", response_model=UserResponse)
+def read_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
 @router.post("/refresh", response_model=TokenResponse)
-def refresh_tokens(
+def refresh_token(
     payload: RefreshTokenRequest,
     db: Session = Depends(get_db),
 ):
-    decoded = decode_refresh_token(payload.refresh_token)
+    decoded_payload = decode_refresh_token(payload.refresh_token)
 
-    if not decoded:
-        raise HTTPException(
+    if not decoded_payload:
+        raise AppException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token",
+            code="invalid_refresh_token",
+            message="Invalid refresh token",
         )
 
-    user_id = decoded.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token payload",
-        )
-
-    db_token = db.query(RefreshToken).filter(
+    stored_token = db.query(RefreshToken).filter(
         RefreshToken.token == payload.refresh_token
     ).first()
 
-    if not db_token or db_token.is_revoked:
-        raise HTTPException(
+    if not stored_token or stored_token.is_revoked:
+        raise AppException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token is revoked or not found",
+            code="refresh_token_revoked",
+            message="Refresh token is revoked or not found",
         )
 
-    if db_token.expires_at < datetime.utcnow():
-        raise HTTPException(
+    if stored_token.expires_at < datetime.utcnow():
+        raise AppException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token expired",
+            code="refresh_token_expired",
+            message="Refresh token has expired",
         )
 
-    db_token.is_revoked = True
+    user = db.query(User).filter(User.id == stored_token.user_id).first()
+    if not user:
+        raise AppException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="user_not_found",
+            message="User not found",
+        )
 
-    new_access_token = create_access_token({"sub": str(user_id)})
-    new_refresh_token = create_refresh_token({"sub": str(user_id)})
+    stored_token.is_revoked = True
+
+    new_access_token = create_access_token({"sub": str(user.id), "email": user.email})
+    new_refresh_token = create_refresh_token({"sub": str(user.id), "email": user.email})
 
     new_refresh_token_expires_at = datetime.utcnow() + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
 
-    new_db_token = RefreshToken(
+    db_refresh_token = RefreshToken(
         token=new_refresh_token,
-        user_id=int(user_id),
+        user_id=user.id,
         expires_at=new_refresh_token_expires_at,
+        is_revoked=False,
     )
-
-    db.add(new_db_token)
+    db.add(db_refresh_token)
     db.commit()
+    logger.info("Refreshing tokens for user_id=%s", user.id)
 
     return {
         "access_token": new_access_token,
@@ -149,15 +175,13 @@ def logout(
     payload: RefreshTokenRequest,
     db: Session = Depends(get_db),
 ):
-    db_token = db.query(RefreshToken).filter(
+    stored_token = db.query(RefreshToken).filter(
         RefreshToken.token == payload.refresh_token
     ).first()
 
-    if db_token and not db_token.is_revoked:
-        db_token.is_revoked = True
+    if stored_token:
+        stored_token.is_revoked = True
         db.commit()
+        logger.info("User logout: user_id=%s", stored_token.user_id)
 
-
-@router.get("/me", response_model=UserResponse)
-def read_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
